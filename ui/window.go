@@ -27,6 +27,9 @@ type Visualizer struct {
 
 	sz  size.Event
 	pos image.Rectangle
+
+	crossCenterX int
+	crossCenterY int
 }
 
 func (pw *Visualizer) Main() {
@@ -43,7 +46,9 @@ func (pw *Visualizer) Update(t screen.Texture) {
 
 func (pw *Visualizer) run(s screen.Screen) {
 	w, err := s.NewWindow(&screen.NewWindowOptions{
-		Title: pw.Title,
+		Title:  pw.Title,
+		Width:  800,
+		Height: 800,
 	})
 	if err != nil {
 		log.Fatal("Failed to initialize the app window:", err)
@@ -94,11 +99,11 @@ func detectTerminate(e any) bool {
 	switch e := e.(type) {
 	case lifecycle.Event:
 		if e.To == lifecycle.StageDead {
-			return true // Window destroy initiated.
+			return true
 		}
 	case key.Event:
 		if e.Code == key.CodeEscape {
-			return true // Esc pressed.
+			return true
 		}
 	}
 	return false
@@ -107,23 +112,25 @@ func detectTerminate(e any) bool {
 func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 	switch e := e.(type) {
 
-	case size.Event: // Оновлення даних про розмір вікна.
+	case size.Event:
 		pw.sz = e
+		pw.crossCenterX = pw.sz.WidthPx / 2
+		pw.crossCenterY = pw.sz.HeightPx / 2
 
 	case error:
 		log.Printf("ERROR: %s", e)
 
 	case mouse.Event:
-		if t == nil {
-			// TODO: Реалізувати реакцію на натискання кнопки миші.
+		if t == nil && e.Button == mouse.ButtonLeft && e.Direction == mouse.DirPress {
+			pw.crossCenterX = int(e.X)
+			pw.crossCenterY = int(e.Y)
+			pw.w.Send(paint.Event{})
 		}
 
 	case paint.Event:
-		// Малювання контенту вікна.
 		if t == nil {
 			pw.drawDefaultUI()
 		} else {
-			// Використання текстури отриманої через виклик Update.
 			pw.w.Scale(pw.sz.Bounds(), t, t.Bounds(), draw.Src, nil)
 		}
 		pw.w.Publish()
@@ -131,11 +138,34 @@ func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 }
 
 func (pw *Visualizer) drawDefaultUI() {
-	pw.w.Fill(pw.sz.Bounds(), color.Black, draw.Src) // Фон.
+	pw.w.Fill(pw.sz.Bounds(), color.White, draw.Src)
 
-	// TODO: Змінити колір фону та додати відображення фігури у вашому варіанті.
+	if pw.crossCenterX == 0 && pw.crossCenterY == 0 {
+		pw.crossCenterX = pw.sz.WidthPx / 2
+		pw.crossCenterY = pw.sz.HeightPx / 2
+	}
 
-	// Малювання білої рамки.
+	crossColor := color.RGBA{R: 0, G: 0, B: 255, A: 255}
+
+	rectThickness := 100
+	rectLength := 400
+
+	horizontalRect := image.Rect(
+		pw.crossCenterX-rectLength/2,
+		pw.crossCenterY-rectThickness/2,
+		pw.crossCenterX+rectLength/2,
+		pw.crossCenterY+rectThickness/2,
+	)
+	pw.w.Fill(horizontalRect, crossColor, draw.Src)
+
+	verticalRect := image.Rect(
+		pw.crossCenterX-rectThickness/2,
+		pw.crossCenterY-rectLength/2,
+		pw.crossCenterX+rectThickness/2,
+		pw.crossCenterY+rectLength/2,
+	)
+	pw.w.Fill(verticalRect, crossColor, draw.Src)
+
 	for _, br := range imageutil.Border(pw.sz.Bounds(), 10) {
 		pw.w.Fill(br, color.White, draw.Src)
 	}
