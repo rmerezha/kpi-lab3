@@ -2,6 +2,7 @@ package painter
 
 import (
 	"image"
+	"sync"
 
 	"golang.org/x/exp/shiny/screen"
 )
@@ -44,17 +45,50 @@ func (l *Loop) Post(op Operation) {
 
 // StopAndWait сигналізує про необхідність завершити цикл та блокується до моменту його повної зупинки.
 func (l *Loop) StopAndWait() {
+	
 }
 
-// TODO: Реалізувати чергу подій.
-type messageQueue struct{}
+type messageQueue struct {
+	ops []Operation
+	mu  sync.Mutex
 
-func (mq *messageQueue) push(op Operation) {}
+	blocked chan struct{}
+}
+
+func (mq *messageQueue) push(op Operation) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	mq.ops = append(mq.ops, op)
+
+	if mq.blocked != nil {
+		close(mq.blocked)
+		mq.blocked = nil
+	}
+}
 
 func (mq *messageQueue) pull() Operation {
-	return nil
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	for len(mq.ops) == 0 {
+		if mq.blocked == nil {
+			mq.blocked = make(chan struct{})
+		}
+		mq.mu.Unlock()
+		<-mq.blocked
+		mq.mu.Lock()
+	}
+
+	op := mq.ops[0]
+	mq.ops[0] = nil
+	mq.ops = mq.ops[1:]
+	return op
 }
 
 func (mq *messageQueue) empty() bool {
-	return false
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	return len(mq.ops) == 0
 }
